@@ -7,5 +7,11 @@
 </script>
 
 <style>
-/* Add any global styles here */
+.EasyMDEContainer {
+  z-index: 1;
+}
+
+.slash-menu {
+  z-index: 2;
+}
 </style>

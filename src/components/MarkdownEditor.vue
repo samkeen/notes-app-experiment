@@ -1,244 +1,221 @@
 <template>
-  <div class="markdown-editor-container" :class="{ 'fullscreen': isFullscreen }">
-    <div class="toolbar">
-      <button @click="insertMarkdown('**', '**')" title="Bold (Ctrl+B)">B</button>
-      <button @click="insertMarkdown('*', '*')" title="Italic (Ctrl+I)">I</button>
-      <button @click="insertMarkdown('# ')" title="Heading">H</button>
-      <button @click="insertMarkdown('[', '](url)')" title="Link">Link</button>
-      <button @click="insertList" title="List">List</button>
-      <button @click="insertCodeBlock" title="Code Block">Code</button>
-      <button @click="toggleFullscreen" title="Toggle Fullscreen">
-        {{ isFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}
-      </button>
-      <button @click="showHelpModal = true" title="Help">?</button>
-      <button @click="confirmDelete" title="Delete Note" class="delete-button">Delete</button>
-    </div>
-    <textarea
-      ref="editorRef"
-      class="markdown-editor"
-      :value="modelValue"
-      @input="handleInput"
-      @keydown="handleKeyDown"
-    ></textarea>
-    <div class="markdown-preview" v-html="renderedMarkdown"></div>
-
-    <!-- Help Modal -->
-    <div v-if="showHelpModal" class="modal">
-      <div class="modal-content">
-        <h2>Markdown Editor Help</h2>
-        <h3>Keyboard Shortcuts</h3>
-        <ul>
-          <li><strong>Ctrl+B</strong>: Bold</li>
-          <li><strong>Ctrl+I</strong>: Italic</li>
-        </ul>
-        <h3>Markdown Syntax</h3>
-        <ul>
-          <li><code># Heading</code>: Create a heading</li>
-          <li><code>**Bold**</code>: Make text bold</li>
-          <li><code>*Italic*</code>: Make text italic</li>
-          <li><code>[Link](url)</code>: Create a link</li>
-          <li><code>- Item</code>: Create a list item</li>
-          <li><code>```</code>: Create a code block</li>
-        </ul>
-        <button @click="showHelpModal = false">Close</button>
+  <div class="markdown-editor-container">
+    <textarea ref="editor"></textarea>
+    <div v-if="showSlashMenu" class="slash-menu" ref="slashMenuRef" :style="slashMenuStyle" @keydown="handleMenuKeydown" tabindex="-1">
+      <div
+        v-for="(item, index) in slashMenuItems"
+        :key="index"
+        @click="selectSlashMenuItem(item)"
+        @mouseover="selectedIndex = index"
+        :class="['slash-menu-item', { 'selected': selectedIndex === index }]"
+      >
+        {{ item.label }}
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
-import debounce from 'lodash/debounce'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import EasyMDE from 'easymde'
+import 'easymde/dist/easymde.min.css'
 
 const props = defineProps(['modelValue'])
-const emit = defineEmits(['update:modelValue', 'delete'])
+const emit = defineEmits(['update:modelValue'])
 
-const editorRef = ref(null)
-const isFullscreen = ref(false)
-const showHelpModal = ref(false)
+const editor = ref(null)
+const slashMenuRef = ref(null)
+let easyMDE = null
 
-const renderedMarkdown = computed(() => {
-  const rendered = marked(props.modelValue || '')
-  return DOMPurify.sanitize(rendered)
-})
+const showSlashMenu = ref(false)
+const slashMenuStyle = ref({})
+const selectedIndex = ref(0)
 
-const confirmDelete = () => {
-  if (confirm('Are you sure you want to delete this note?')) {
-    emit('delete')
+// AI function stubs
+const doAiThingOne = () => {
+  console.log("AI Thing One is being processed...")
+  // Here you would typically call an API or perform some AI-related task
+  return "AI Thing One has been completed."
+}
+
+const doAiThingTwo = () => {
+  console.log("AI Thing Two is being processed...")
+  // Here you would typically call an API or perform some AI-related task
+  return "AI Thing Two has been completed."
+}
+
+const slashMenuItems = ref([
+  { label: 'ai-thing-one', action: doAiThingOne },
+  { label: 'ai-thing-two', action: doAiThingTwo },
+])
+
+const handleMenuKeydown = (event) => {
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      selectedIndex.value = (selectedIndex.value + 1) % slashMenuItems.value.length
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      selectedIndex.value = (selectedIndex.value - 1 + slashMenuItems.value.length) % slashMenuItems.value.length
+      break
+    case 'Enter':
+      event.preventDefault()
+      selectSlashMenuItem(slashMenuItems.value[selectedIndex.value])
+      break
+    case 'Escape':
+      event.preventDefault()
+      showSlashMenu.value = false
+      easyMDE.codemirror.focus()
+      break
   }
 }
 
-const handleInput = debounce((event) => {
-  emit('update:modelValue', event.target.value)
-}, 100)
+const replaceSlashCommand = (text) => {
+  const cm = easyMDE.codemirror
+  const cursor = cm.getCursor()
+  const line = cm.getLine(cursor.line)
+  const slashIndex = line.lastIndexOf('/', cursor.ch)
 
-const insertMarkdown = (before, after = '') => {
-  const input = editorRef.value
-  const start = input.selectionStart
-  const end = input.selectionEnd
-  const text = input.value
-  const newText = text.substring(0, start) + before + text.substring(start, end) + after + text.substring(end)
+  if (slashIndex !== -1) {
+    cm.replaceRange(text,
+      { line: cursor.line, ch: slashIndex },
+      { line: cursor.line, ch: cursor.ch }
+    )
+  } else {
+    cm.replaceRange(text, cursor, cursor)
+  }
+  cm.focus()
+}
 
-  emit('update:modelValue', newText)
+const selectSlashMenuItem = async (item) => {
+  showSlashMenu.value = false
+  const result = await item.action()
+  replaceSlashCommand(result)
+}
+
+const positionSlashMenu = (cm) => {
+  const cursor = cm.getCursor()
+  const coords = cm.cursorCoords(cursor, 'window')
+  const editorRect = cm.getWrapperElement().getBoundingClientRect()
 
   nextTick(() => {
-    input.focus()
-    input.setSelectionRange(start + before.length, end + before.length)
+    if (slashMenuRef.value) {
+      const menuRect = slashMenuRef.value.getBoundingClientRect()
+      const rightSpace = window.innerWidth - coords.left - menuRect.width
+      const bottomSpace = window.innerHeight - coords.bottom - menuRect.height
+
+      let top, left
+
+      // Position to the right by default
+      left = coords.left + 20 // 20px to the right of cursor
+
+      // If not enough space on the right, position to the left
+      if (rightSpace < 10) {
+        left = coords.left - menuRect.width - 10
+      }
+
+      // Position below by default
+      top = coords.top + 20 // 20px below the cursor
+
+      // If not enough space below, position above
+      if (bottomSpace < 10) {
+        top = coords.top - menuRect.height - 10
+      }
+
+      // Ensure the menu stays within the editor boundaries
+      left = Math.max(editorRect.left, Math.min(left, editorRect.right - menuRect.width))
+      top = Math.max(editorRect.top, Math.min(top, editorRect.bottom - menuRect.height))
+
+      slashMenuStyle.value = {
+        top: `${top}px`,
+        left: `${left}px`
+      }
+    }
   })
 }
 
-const insertList = () => {
-  const input = editorRef.value
-  const start = input.selectionStart
-  const text = input.value
-  const lines = text.substring(0, start).split('\n')
-  const currentLine = lines[lines.length - 1]
-  const listPrefix = currentLine.trim().startsWith('- ') ? '' : '- '
-  insertMarkdown(listPrefix)
-}
+onMounted(() => {
+  easyMDE = new EasyMDE({
+    element: editor.value,
+    initialValue: props.modelValue,
+    autofocus: true,
+    spellChecker: false,
+    autosave: {
+      enabled: true,
+      uniqueId: "MyUniqueID",
+      delay: 1000,
+    },
+    toolbar: [
+      "bold", "italic", "heading", "|",
+      "quote", "unordered-list", "ordered-list", "|",
+      "link", "image", "|",
+      "preview", "side-by-side", "fullscreen", "|",
+      "guide"
+    ],
+  })
 
-const insertCodeBlock = () => {
-  insertMarkdown('```\n', '\n```')
-}
+  easyMDE.codemirror.on("change", () => {
+    emit('update:modelValue', easyMDE.value())
+  })
 
-const toggleFullscreen = () => {
-  isFullscreen.value = !isFullscreen.value
-}
-
-const handleKeyDown = (event) => {
-  if (event.ctrlKey || event.metaKey) {
-    switch (event.key.toLowerCase()) {
-      case 'b':
-        event.preventDefault()
-        insertMarkdown('**', '**')
-        break
-      case 'i':
-        event.preventDefault()
-        insertMarkdown('*', '*')
-        break
+  easyMDE.codemirror.on("keyup", (cm, event) => {
+    if (event.key === '/') {
+      showSlashMenu.value = true
+      selectedIndex.value = 0
+      positionSlashMenu(cm)
+      nextTick(() => {
+        slashMenuRef.value?.focus()
+      })
+    } else if (showSlashMenu.value && event.key !== '/') {
+      showSlashMenu.value = false
     }
+  })
+
+  // Close slash menu when clicking outside
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.slash-menu')) {
+      showSlashMenu.value = false
+    }
+  })
+})
+
+onUnmounted(() => {
+  if (easyMDE) {
+    easyMDE.toTextArea()
+    easyMDE = null
   }
-}
+})
 
 watch(() => props.modelValue, (newValue) => {
-  if (editorRef.value && newValue !== editorRef.value.value) {
-    editorRef.value.value = newValue
+  if (easyMDE && newValue !== easyMDE.value()) {
+    easyMDE.value(newValue)
   }
 })
 </script>
 
 <style scoped>
 .markdown-editor-container {
-  display: flex;
-  flex-direction: column;
   height: 100%;
+  position: relative;
 }
 
-.markdown-editor-container.fullscreen {
+.slash-menu {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9999;
-  background: white;
-}
-
-.toolbar {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  background-color: #f0f0f0;
-}
-
-.toolbar button {
-  padding: 5px 10px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.toolbar button:hover {
-  background-color: #0056b3;
-}
-
-.delete-button {
-  background-color: #dc3545 !important;
-}
-
-.delete-button:hover {
-  background-color: #c82333 !important;
-}
-
-.markdown-editor, .markdown-preview {
-  flex: 1;
+  background-color: white;
   border: 1px solid #ccc;
-  min-height: 300px;
-  padding: 10px;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-y: auto;
-}
-
-.markdown-editor {
-  resize: none;
-}
-
-.markdown-editor:focus {
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  z-index: 1000;
   outline: none;
-  border-color: #007bff;
 }
 
-.markdown-preview {
-  background-color: #f8f8f8;
-  font-family: Arial, sans-serif;
-}
-
-.modal {
-  position: fixed;
-  z-index: 10000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0,0,0,0.4);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.modal-content {
-  background-color: #fefefe;
-  padding: 20px;
-  border-radius: 5px;
-  max-width: 500px;
-  width: 100%;
-}
-
-.modal-content h2 {
-  margin-top: 0;
-}
-
-.modal-content ul {
-  padding-left: 20px;
-}
-
-.modal-content button {
-  margin-top: 20px;
-  padding: 5px 10px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 3px;
+.slash-menu-item {
+  padding: 8px 12px;
   cursor: pointer;
 }
 
-.modal-content button:hover {
-  background-color: #0056b3;
+.slash-menu-item:hover, .slash-menu-item.selected {
+  background-color: #f0f0f0;
 }
 </style>

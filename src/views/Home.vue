@@ -6,7 +6,6 @@
         v-if="currentNote"
         v-model="currentNote.content"
         @update:modelValue="updateNote"
-        @delete="deleteCurrentNote"
       />
     </div>
   </div>
@@ -29,12 +28,6 @@ onMounted(() => {
 const updateNote = (content) => {
   if (currentNote.value) {
     notesStore.updateNote(currentNote.value.id, content)
-  }
-}
-
-const deleteCurrentNote = () => {
-  if (currentNote.value) {
-    notesStore.deleteNote(currentNote.value.id)
   }
 }
 
