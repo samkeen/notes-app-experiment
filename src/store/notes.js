@@ -11,8 +11,17 @@ export const useNotesStore = defineStore('notes', {
   },
   actions: {
     async fetchNotes() {
-      const { getAllNotes } = useStorage()
-      this.notes = getAllNotes()
+      try {
+        const { getAllNotes } = useStorage()
+        this.notes = getAllNotes()
+        if (this.notes.length > 0 && !this.currentNoteId) {
+          this.currentNoteId = this.notes[0].id
+        }
+        this.error = null
+      } catch (e) {
+        console.error('Failed to fetch notes:', e)
+        this.error = 'Failed to fetch notes. Please try again.'
+      }
     },
     async createNote(content) {
       const { saveNote } = useStorage()
@@ -36,7 +45,7 @@ export const useNotesStore = defineStore('notes', {
       deleteNote(id)
       this.notes = this.notes.filter(note => note.id !== id)
       if (this.currentNoteId === id) {
-        this.currentNoteId = null
+        this.currentNoteId = this.notes.length > 0 ? this.notes[0].id : null
       }
     },
     setCurrentNote(id) {

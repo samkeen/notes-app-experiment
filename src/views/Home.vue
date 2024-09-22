@@ -2,48 +2,40 @@
   <div class="home">
     <NoteList />
     <div class="editor-container">
-      <Toolbar :isPreview="isPreview" @toggle-view="toggleView" />
-      <div v-if="currentNote" class="content-area">
-        <MarkdownEditor
-            v-if="!isPreview"
-            v-model="currentNote.content"
-            @input="updateNote"
-        />
-        <MarkdownPreview
-            v-else
-            :markdown="currentNote.content"
-        />
-      </div>
+      <WYSIWYGMarkdownEditor
+        v-if="currentNote"
+        v-model="currentNote.content"
+        @update:modelValue="updateNote"
+        @delete="deleteCurrentNote"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted, watch} from 'vue'
-import {storeToRefs} from 'pinia'
-import {useNotesStore} from '../store/notes'
+import { onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useNotesStore } from '../store/notes'
 import NoteList from '../components/NoteList.vue'
-import MarkdownEditor from '../components/MarkdownEditor.vue'
-import MarkdownPreview from '../components/MarkdownPreview.vue'
-import Toolbar from '../components/Toolbar.vue'
+import WYSIWYGMarkdownEditor from '../components/MarkdownEditor.vue'
 
 const notesStore = useNotesStore()
-const {currentNote} = storeToRefs(notesStore)
-
-const isPreview = ref(false)
+const { currentNote } = storeToRefs(notesStore)
 
 onMounted(() => {
   notesStore.fetchNotes()
 })
 
-const updateNote = () => {
+const updateNote = (content) => {
   if (currentNote.value) {
-    notesStore.updateNote(currentNote.value.id, currentNote.value.content)
+    notesStore.updateNote(currentNote.value.id, content)
   }
 }
 
-const toggleView = () => {
-  isPreview.value = !isPreview.value
+const deleteCurrentNote = () => {
+  if (currentNote.value) {
+    notesStore.deleteNote(currentNote.value.id)
+  }
 }
 
 watch(() => currentNote.value, (newNote) => {
@@ -60,12 +52,6 @@ watch(() => currentNote.value, (newNote) => {
 }
 
 .editor-container {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.content-area {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
